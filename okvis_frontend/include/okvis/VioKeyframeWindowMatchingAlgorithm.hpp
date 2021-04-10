@@ -132,11 +132,23 @@ class VioKeyframeWindowMatchingAlgorithm : public okvis::MatchingAlgorithm {
   virtual float distance(size_t indexA, size_t indexB) const {
     OKVIS_ASSERT_LT_DBG(MatchingAlgorithm::Exception, indexA, sizeA(), "index A out of bounds");
     OKVIS_ASSERT_LT_DBG(MatchingAlgorithm::Exception, indexB, sizeB(), "index B out of bounds");
-    const float dist = static_cast<float>(specificDescriptorDistance(
-        frameA_->keypointDescriptor(camIdA_, indexA),
-        frameB_->keypointDescriptor(camIdB_, indexB)));
 
-    if (dist < distanceThreshold_) {
+// original code
+//    const float dist = static_cast<float>(specificDescriptorDistance(
+//        frameA_->keypointDescriptor(camIdA_, indexA),
+//        frameB_->keypointDescriptor(camIdB_, indexB)));
+//
+//    if (dist < distanceThreshold_) {
+//      if (verifyMatch(indexA, indexB))
+//        return dist;
+//    }
+//    return std::numeric_limits<float>::max();
+
+    const float dist = specificDescriptorDistance1(
+        frameA_->keypointDescriptor1(camIdA_, indexA),
+        frameB_->keypointDescriptor1(camIdB_, indexB));
+
+    if (dist < .7) {
       if (verifyMatch(indexA, indexB))
         return dist;
     }
@@ -251,6 +263,16 @@ class VioKeyframeWindowMatchingAlgorithm : public okvis::MatchingAlgorithm {
         "Trying to compare a descriptor with a null description vector");
 
     return brisk::Hamming::PopcntofXORed(descriptorA, descriptorB, 3/*48 / 16*/);
+  }
+
+  float specificDescriptorDistance1(
+      const cv::Mat descriptorA,
+      const cv::Mat descriptorB) const {
+    OKVIS_ASSERT_TRUE_DBG(
+        Exception, descriptorA != NULL && descriptorB != NULL,
+        "Trying to compare a descriptor with a null description vector");
+
+    return cv::norm(descriptorA, descriptorB);
   }
 };
 

@@ -108,6 +108,10 @@ std::shared_ptr<const GEOMETRY_T> Frame::geometryAs() const
 #endif
 }
 
+void Frame::setTensor(const torch::Tensor & t) {
+  tensor_ = t;
+}
+
 // detect keypoints. This uses virtual function calls.
 ///        That's a negligibly small overhead for many detections.
 ///        returns the number of detected points.
@@ -156,6 +160,7 @@ int Frame::describe(const Eigen::Vector3d & extractionDirection)
   // extraction
   extractor_->compute(image_, keypoints_, descriptors_);
   landmarkIds_ = std::vector<uint64_t>(keypoints_.size(),0);
+  std::cout << descriptors_.size << std::endl;
   return keypoints_.size();
 }
 // describe keypoints. This uses virtual function calls.
@@ -258,6 +263,33 @@ const unsigned char * Frame::keypointDescriptor(size_t keypointIdx)
   return descriptors_.data + descriptors_.cols * keypointIdx;
 #else
   return descriptors_.data + descriptors_.cols * keypointIdx;
+#endif
+}
+
+// access the descriptor -- CAUTION: high-speed version.
+///        returns NULL if out of bounds.
+const cv::Mat Frame::keypointDescriptor1(size_t keypointIdx)
+{
+#ifndef NDEBUG
+  OKVIS_ASSERT_TRUE(
+      Exception,
+      keypointIdx < keypoints_.size(),
+      "keypointIdx " << keypointIdx << "out of range: keypoints has size "
+          << keypoints_.size());
+  //for (int j = 0; j < 100; j ++) {
+  //  for (int i = 0; i < 256; i ++) {
+  //      //std::cout << t2[i][j].item<float>();
+  //      std::cout << ", " << ((float*)descriptors_.data)[i*descriptors_.cols + j];
+  //      std::cout << ", " << descriptors_.at<float>(i, j);
+  //      std::cout << ", " << descriptors_.col(j).at<float>(i);
+  //      std::cout << "" << std::endl;
+  //  }
+  //}
+  //return descriptors_.data + descriptors_.cols * keypointIdx;
+  return descriptors_.col(keypointIdx);
+#else
+  //return descriptors_.data + descriptors_.cols * keypointIdx;
+  return descriptors_.col(keypointIdx);
 #endif
 }
 

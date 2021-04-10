@@ -204,6 +204,9 @@ class MultiFrame
   inline const unsigned char * keypointDescriptor(size_t cameraIdx,
                                                   size_t keypointIdx);
 
+  inline const cv::Mat keypointDescriptor1(size_t cameraIdx,
+                                                  size_t keypointIdx);
+
   /// \brief Set the landmark ID
   /// @param[in] cameraIdx The camera index.
   /// @param[in] keypointIdx The requested keypoint's index.

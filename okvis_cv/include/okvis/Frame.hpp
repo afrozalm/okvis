@@ -56,6 +56,10 @@
 #include <okvis/assert_macros.hpp>
 #include "okvis/cameras/CameraBase.hpp"
 
+#include <torch/torch.h>
+#include <torch/script.h>
+#include <iostream>
+
 /// \brief okvis Main namespace of this package.
 namespace okvis {
 
@@ -95,6 +99,8 @@ class Frame
   /// \brief Set the geometry
   /// @param[in] cameraGeometry The camera geometry.
   inline void setGeometry(std::shared_ptr<const cameras::CameraBase> cameraGeometry);
+
+  inline void setTensor(const torch::Tensor & t);
 
   /// \brief Set the detector
   /// @param[in] detector The detector to be used.
@@ -162,6 +168,8 @@ class Frame
   /// \return The descriptor data pointer; NULL if out of bounds.
   inline const unsigned char * keypointDescriptor(size_t keypointIdx);
 
+  inline const cv::Mat keypointDescriptor1(size_t keypointIdx);
+
   /// \brief Set the landmark ID
   /// @param[in] keypointIdx The requested keypoint's index.
   /// @param[in] landmarkId The landmark Id.
@@ -197,6 +205,7 @@ class Frame
   std::shared_ptr<cv::DescriptorExtractor> extractor_;  ///< the extractor
   std::vector<cv::KeyPoint> keypoints_;  ///< we store keypoints using OpenCV's struct
   std::vector<uint64_t> landmarkIds_;  ///< landmark Id, if associated -- 0 otherwise
+  torch::Tensor tensor_;
 };
 
 }  // namespace okvis

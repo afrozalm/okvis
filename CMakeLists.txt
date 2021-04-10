@@ -62,9 +62,9 @@ if(APPLE)
   # The clang compiler (on osx) is somehow much more strict
   # than the compilers on ubuntu and so this does not seem
   # possible on OSX just yet.
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -Wall -std=c++11 -fPIC")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -Wall -std=c++14 -fPIC")
 else()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -Wall -std=c++11 -fPIC")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -Wall -std=c++14 -fPIC")
 endif()
 
 if(${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "arm*")
@@ -95,6 +95,12 @@ if (OPENMP_FOUND)
    add_definitions(-DUSE_OPENMP)
    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 endif()
+
+# require libtorch
+find_package(Torch REQUIRED)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+message( STATUS "Found Torch: ${TORCH_INCLUDE_DIRS}" )
+include_directories(${TORCH_INCLUDE_DIRS})
 
 # libvisensor
 find_package(VISensor)
@@ -366,6 +372,7 @@ if(BUILD_APPS)
     ${Boost_LIBRARIES}
     ${TIME_PROFILER_LIBRARIES}
     ${OPENGV_LIBS}
+    ${TORCH_LIBRARIES}
     #C:/Boost/lib/libboost_date_time-vc120-mt-gd-1_55.lib
     #${BRISK_LIBRARIES}
   )

@@ -223,6 +223,13 @@ const unsigned char * MultiFrame::keypointDescriptor(size_t cameraIdx,
   return frames_[cameraIdx].keypointDescriptor(keypointIdx);
 }
 
+const cv::Mat MultiFrame::keypointDescriptor1(size_t cameraIdx,
+                                                     size_t keypointIdx)
+{
+  OKVIS_ASSERT_TRUE_DBG(Exception, cameraIdx < frames_.size(), "Out of range");
+  return frames_[cameraIdx].keypointDescriptor1(keypointIdx);
+}
+
 // Set the landmark ID
 bool MultiFrame::setLandmarkId(size_t cameraIdx, size_t keypointIdx,
                                uint64_t landmarkId)

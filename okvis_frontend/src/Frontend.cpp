@@ -86,6 +86,21 @@ Frontend::Frontend(size_t numCameras)
         std::unique_ptr<std::mutex>(new std::mutex()));
   }
   initialiseBriskFeatureDetectors();
+  initialiseSuperPoint();
+}
+
+void Frontend::initialiseSuperPoint() {
+  try {
+    // TODO - parameterize model location
+    // TODO - probably move detection/descripton to OpenARK
+    // TODO - configure switching between different detectors
+    superpoint_ = std::make_unique<torch::jit::script::Module>(torch::jit::load("traced_superpoint_model_cuda.pt"));
+    superpoint_->to(torch::kCUDA);
+  }
+  catch (const c10::Error& e) {
+    std::cerr << "error loading the model\n";
+    return;
+  }
 }
 
 // Detection and descriptor extraction on a per image basis.
@@ -95,19 +110,51 @@ bool Frontend::detectAndDescribe(size_t cameraIndex,
                                  const std::vector<cv::KeyPoint> * keypoints) {
   OKVIS_ASSERT_TRUE_DBG(Exception, cameraIndex < numCameras_, "Camera index exceeds number of cameras.");
   std::lock_guard<std::mutex> lock(*featureDetectorMutexes_[cameraIndex]);
-
   // check there are no keypoints here
   OKVIS_ASSERT_TRUE(Exception, keypoints == nullptr, "external keypoints currently not supported")
 
-  frameOut->setDetector(cameraIndex, featureDetectors_[cameraIndex]);
-  frameOut->setExtractor(cameraIndex, descriptorExtractors_[cameraIndex]);
+  // convert image to tensor
+  torch::NoGradGuard no_grad;
+  const cv::Mat& img = frameOut->image(cameraIndex);
+  std::vector<torch::jit::IValue> inputs;
+  torch::Tensor img_tensor = torch::from_blob(img.data, { 1, img.rows, img.cols, 1 }, torch::kByte).to(torch::kCUDA);
+  img_tensor = img_tensor.permute({ 0, 3, 1, 2 });
+  img_tensor = img_tensor.toType(torch::kFloat);
+  img_tensor = img_tensor.div(255);
+  inputs.push_back(img_tensor);
 
-  frameOut->detect(cameraIndex);
+  // execute the model
+  auto output = superpoint_->forward(inputs);
+  torch::Tensor t0 = output.toTuple()->elements()[0].toTensor().to(torch::kCPU); // keypoints k x 2
+  //torch::Tensor t1 = output.toTuple()->elements()[1].toTensor(); // scores k
+  torch::Tensor t2 = output.toTuple()->elements()[2].toTensor().to(torch::kCPU); // descriptors 256 x k
+
+  // convert to cv structs
+  std::vector<cv::KeyPoint> kpts;
+  for (int i = 0; i < t0.sizes()[0]; i ++) {
+    cv::KeyPoint kpt;
+    kpt.pt.x = t0[i][0].item<float>();
+    kpt.pt.y = t0[i][1].item<float>();
+    kpt.size = 36; // TODO - what should this be? affects geometry check
+    kpts.push_back(kpt);
+  }
+  cv::Mat mat(t2.sizes()[0], t2.sizes()[1], CV_32F, t2.data_ptr());
+
+  frameOut->frames_[cameraIndex].setTensor(t2); // prevent freeing memory
+  frameOut->resetKeypoints(cameraIndex, kpts);
+  frameOut->resetDescriptors(cameraIndex, mat);
+
+
+  // original code
+  //frameOut->setDetector(cameraIndex, featureDetectors_[cameraIndex]);
+  //frameOut->setExtractor(cameraIndex, descriptorExtractors_[cameraIndex]);
+
+  //frameOut->detect(cameraIndex);
 
   // ExtractionDirection == gravity direction in camera frame
-  Eigen::Vector3d g_in_W(0, 0, -1);
-  Eigen::Vector3d extractionDirection = T_WC.inverse().C() * g_in_W;
-  frameOut->describe(cameraIndex, extractionDirection);
+  //Eigen::Vector3d g_in_W(0, 0, -1);
+  //Eigen::Vector3d extractionDirection = T_WC.inverse().C() * g_in_W;
+  //frameOut->describe(cameraIndex, extractionDirection);
 
   // set detector/extractor to nullpointer? TODO
   return true;
@@ -128,7 +175,6 @@ bool Frontend::dataAssociationAndInitialization(
   // RANSAC (2D2D / 3D2D)
   // decide keyframe
   // left-right stereo match & init
-
   // find distortion type
   okvis::cameras::NCameraSystem::DistortionType distortionType = params.nCameraSystem
       .distortionType(0);
@@ -139,13 +185,11 @@ bool Frontend::dataAssociationAndInitialization(
   }
   int num3dMatches = 0;
   const auto requiredMatches = params.optimization.numKeypointsResetThreshold;
-
   // first frame? (did do addStates before, so 1 frame minimum in estimator)
   if (estimator.numFrames() > 1) {
 
     double uncertainMatchFraction = 0;
     bool rotationOnly = false;
-
     // match to last keyframe
     TimerSwitchable matchKeyframesTimer("2.4.1 matchToKeyframes");
     switch (distortionType) {
@@ -187,6 +231,7 @@ bool Frontend::dataAssociationAndInitialization(
         LOG(INFO) << "Initialized!";
       }
     }
+    //std::cout << "matches: " << num3dMatches << std::endl;
     if (num3dMatches <= requiredMatches) {
       *needReset = true;
       LOG(INFO) << "3D matches is not enough!";
@@ -265,7 +310,6 @@ bool Frontend::dataAssociationAndInitialization(
       break;
   }
   matchStereoTimer.stop();
-
   return true;
 }
 

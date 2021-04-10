@@ -49,6 +49,10 @@
 #include <okvis/timing/Timer.hpp>
 #include <okvis/DenseMatcher.hpp>
 
+#include <torch/torch.h>
+#include <torch/script.h>
+#include <iostream>
+
 /// \brief okvis Main namespace of this package.
 namespace okvis {
 
@@ -413,6 +417,9 @@ class Frontend : public VioFrontendInterface {
 
   /// (re)instantiates feature detectors and descriptor extractors. Used after settings changed or at startup.
   void initialiseBriskFeatureDetectors();
+  void initialiseSuperPoint();
+
+  std::unique_ptr<torch::jit::script::Module> superpoint_;
 
 };
 
