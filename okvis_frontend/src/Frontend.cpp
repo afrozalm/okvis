@@ -87,6 +87,7 @@ Frontend::Frontend(size_t numCameras)
   }
   initialiseBriskFeatureDetectors();
   initialiseSuperPoint();
+  initialiseR2D2_N16();
 }
 
 void Frontend::initialiseSuperPoint() {
@@ -96,6 +97,20 @@ void Frontend::initialiseSuperPoint() {
     // TODO - configure switching between different detectors
     superpoint_ = std::make_unique<torch::jit::script::Module>(torch::jit::load("traced_superpoint_model_cuda.pt"));
     superpoint_->to(torch::kCUDA);
+  }
+  catch (const c10::Error& e) {
+    std::cerr << "error loading the model\n";
+    return;
+  }
+}
+
+void Frontend::initialiseR2D2_N16() {
+  try {
+    // TODO - parameterize model location
+    // TODO - probably move detection/descripton to OpenARK
+    // TODO - configure switching between different detectors
+    R2D2_N16_ = std::make_unique<torch::jit::script::Module>(torch::jit::load("traced_r2d2_WASF_N16.pt"));
+    R2D2_N16_->to(torch::kCUDA);
   }
   catch (const c10::Error& e) {
     std::cerr << "error loading the model\n";
@@ -123,7 +138,8 @@ bool Frontend::detectAndDescribe(size_t cameraIndex,
   img_tensor = img_tensor.div(255);
   inputs.push_back(img_tensor);
 
-  // execute the model
+  //TODO: Change this model to R2D2
+  //---------------------START------------------------
   auto output = superpoint_->forward(inputs);
   torch::Tensor t0 = output.toTuple()->elements()[0].toTensor().to(torch::kCPU); // keypoints k x 2
   //torch::Tensor t1 = output.toTuple()->elements()[1].toTensor(); // scores k
@@ -143,7 +159,7 @@ bool Frontend::detectAndDescribe(size_t cameraIndex,
   frameOut->frames_[cameraIndex].setTensor(t2); // prevent freeing memory
   frameOut->resetKeypoints(cameraIndex, kpts);
   frameOut->resetDescriptors(cameraIndex, mat);
-
+  //---------------------END------------------------
 
   // original code
   //frameOut->setDetector(cameraIndex, featureDetectors_[cameraIndex]);
