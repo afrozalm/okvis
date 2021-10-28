@@ -4,7 +4,7 @@
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions are met:
- * 
+ *
  *   * Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *   * Redistributions in binary form must reproduce the above copyright notice,
@@ -144,9 +144,9 @@ class VioKeyframeWindowMatchingAlgorithm : public okvis::MatchingAlgorithm {
 //    }
 //    return std::numeric_limits<float>::max();
 
-    const float dist = specificDescriptorDistance1(
-        frameA_->keypointDescriptor1(camIdA_, indexA),
-        frameB_->keypointDescriptor1(camIdB_, indexB));
+    const float dist = specificDescriptorDistanceSuperpoint(
+        frameA_->keypointDescriptorSuperpoint(camIdA_, indexA),
+        frameB_->keypointDescriptorSuperpoint(camIdB_, indexB));
 
     if (dist < .7) {
       if (verifyMatch(indexA, indexB))
@@ -265,7 +265,9 @@ class VioKeyframeWindowMatchingAlgorithm : public okvis::MatchingAlgorithm {
     return brisk::Hamming::PopcntofXORed(descriptorA, descriptorB, 3/*48 / 16*/);
   }
 
-  float specificDescriptorDistance1(
+  /// \brief Calculates the distance between two Superpoint
+  // descriptors
+  float specificDescriptorDistanceSuperpoint(
       const cv::Mat descriptorA,
       const cv::Mat descriptorB) const {
     OKVIS_ASSERT_TRUE_DBG(

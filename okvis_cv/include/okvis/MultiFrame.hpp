@@ -4,7 +4,7 @@
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions are met:
- * 
+ *
  *   * Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *   * Redistributions in binary form must reproduce the above copyright notice,
@@ -204,7 +204,11 @@ class MultiFrame
   inline const unsigned char * keypointDescriptor(size_t cameraIdx,
                                                   size_t keypointIdx);
 
-  inline const cv::Mat keypointDescriptor1(size_t cameraIdx,
+  /// \brief Access the descriptor -- CAUTION: high-speed version.
+  /// @param[in] cameraIdx The camera index.
+  /// @param[in] keypointIdx The requested keypoint's index.
+  /// \return The descriptor data pointer; NULL if out of bounds.
+  inline const cv::Mat keypointDescriptorSuperpoint(size_t cameraIdx,
                                                   size_t keypointIdx);
 
   /// \brief Set the landmark ID
@@ -265,7 +269,7 @@ class MultiFrame
     return cameraSystem_.hasOverlap(cameraIndexSeenBy, cameraIndex);
   }
 
-  
+
   std::vector<Frame, Eigen::aligned_allocator<Frame>> frames_;  ///< the individual frames
 
  protected:

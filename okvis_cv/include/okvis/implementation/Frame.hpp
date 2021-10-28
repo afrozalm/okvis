@@ -4,7 +4,7 @@
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions are met:
- * 
+ *
  *   * Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *   * Redistributions in binary form must reproduce the above copyright notice,
@@ -268,7 +268,7 @@ const unsigned char * Frame::keypointDescriptor(size_t keypointIdx)
 
 // access the descriptor -- CAUTION: high-speed version.
 ///        returns NULL if out of bounds.
-const cv::Mat Frame::keypointDescriptor1(size_t keypointIdx)
+const cv::Mat Frame::keypointDescriptorSuperpoint(size_t keypointIdx)
 {
 #ifndef NDEBUG
   OKVIS_ASSERT_TRUE(
@@ -276,19 +276,8 @@ const cv::Mat Frame::keypointDescriptor1(size_t keypointIdx)
       keypointIdx < keypoints_.size(),
       "keypointIdx " << keypointIdx << "out of range: keypoints has size "
           << keypoints_.size());
-  //for (int j = 0; j < 100; j ++) {
-  //  for (int i = 0; i < 256; i ++) {
-  //      //std::cout << t2[i][j].item<float>();
-  //      std::cout << ", " << ((float*)descriptors_.data)[i*descriptors_.cols + j];
-  //      std::cout << ", " << descriptors_.at<float>(i, j);
-  //      std::cout << ", " << descriptors_.col(j).at<float>(i);
-  //      std::cout << "" << std::endl;
-  //  }
-  //}
-  //return descriptors_.data + descriptors_.cols * keypointIdx;
   return descriptors_.col(keypointIdx);
 #else
-  //return descriptors_.data + descriptors_.cols * keypointIdx;
   return descriptors_.col(keypointIdx);
 #endif
 }

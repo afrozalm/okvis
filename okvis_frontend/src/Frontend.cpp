@@ -4,7 +4,7 @@
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions are met:
- * 
+ *
  *   * Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *   * Redistributions in binary form must reproduce the above copyright notice,
@@ -141,24 +141,24 @@ bool Frontend::detectAndDescribe(size_t cameraIndex,
   //TODO: Change this model to R2D2
   //---------------------START------------------------
   auto output = superpoint_->forward(inputs);
-  torch::Tensor t0 = output.toTuple()->elements()[0].toTensor().to(torch::kCPU); // keypoints k x 2
+  torch::Tensor keypoint_tensor = output.toTuple()->elements()[0].toTensor().to(torch::kCPU); // keypoints k x 2
   //torch::Tensor t1 = output.toTuple()->elements()[1].toTensor(); // scores k
-  torch::Tensor t2 = output.toTuple()->elements()[2].toTensor().to(torch::kCPU); // descriptors 256 x k
+  torch::Tensor descriptor_tensor = output.toTuple()->elements()[2].toTensor().to(torch::kCPU); // descriptors 256 x k
 
   // convert to cv structs
   std::vector<cv::KeyPoint> kpts;
-  for (int i = 0; i < t0.sizes()[0]; i ++) {
+  for (int i = 0; i < keypoint_tensor.sizes()[0]; i ++) {
     cv::KeyPoint kpt;
-    kpt.pt.x = t0[i][0].item<float>();
-    kpt.pt.y = t0[i][1].item<float>();
+    kpt.pt.x = keypoint_tensor[i][0].item<float>();
+    kpt.pt.y = keypoint_tensor[i][1].item<float>();
     kpt.size = 36; // TODO - what should this be? affects geometry check
     kpts.push_back(kpt);
   }
-  cv::Mat mat(t2.sizes()[0], t2.sizes()[1], CV_32F, t2.data_ptr());
+  cv::Mat descriptor_mat(descriptor_tensor.sizes()[0], descriptor_tensor.sizes()[1], CV_32F, descriptor_tensor.data_ptr());
 
-  frameOut->frames_[cameraIndex].setTensor(t2); // prevent freeing memory
+  frameOut->frames_[cameraIndex].setTensor(descriptor_tensor); // prevent freeing memory
   frameOut->resetKeypoints(cameraIndex, kpts);
-  frameOut->resetDescriptors(cameraIndex, mat);
+  frameOut->resetDescriptors(cameraIndex, descriptor_mat);
   //---------------------END------------------------
 
   // original code
@@ -880,12 +880,12 @@ void Frontend::initialiseBriskFeatureDetectors() {
     featureDetectors_.push_back(
         std::shared_ptr<cv::FeatureDetector>(
 #ifdef __ARM_NEON__
-            new cv::GridAdaptedFeatureDetector( 
+            new cv::GridAdaptedFeatureDetector(
             new cv::FastFeatureDetector(briskDetectionThreshold_),
                 briskDetectionMaximumKeypoints_, 7, 4 ))); // from config file, except the 7x4...
 #else
             new brisk::ScaleSpaceFeatureDetector<brisk::HarrisScoreCalculator>(
-                briskDetectionThreshold_, briskDetectionOctaves_, 
+                briskDetectionThreshold_, briskDetectionOctaves_,
                 briskDetectionAbsoluteThreshold_,
                 briskDetectionMaximumKeypoints_)));
 #endif
@@ -893,7 +893,7 @@ void Frontend::initialiseBriskFeatureDetectors() {
         std::shared_ptr<cv::DescriptorExtractor>(
             new brisk::BriskDescriptorExtractor(
                 briskDescriptionRotationInvariance_,
-                briskDescriptionScaleInvariance_, 
+                briskDescriptionScaleInvariance_,
                 brisk::BriskDescriptorExtractor::briskV2)));
   }
   for (auto it = featureDetectorMutexes_.begin();

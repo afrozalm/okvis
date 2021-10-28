@@ -4,7 +4,7 @@
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions are met:
- * 
+ *
  *   * Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *   * Redistributions in binary form must reproduce the above copyright notice,
@@ -100,7 +100,9 @@ class Frame
   /// @param[in] cameraGeometry The camera geometry.
   inline void setGeometry(std::shared_ptr<const cameras::CameraBase> cameraGeometry);
 
-  inline void setTensor(const torch::Tensor & t);
+  /// \brief Set the desciptor tensor
+  /// @param[in] desciptor_t The frame tensor.
+  inline void setTensor(const torch::Tensor & desciptor_t);
 
   /// \brief Set the detector
   /// @param[in] detector The detector to be used.
@@ -168,7 +170,7 @@ class Frame
   /// \return The descriptor data pointer; NULL if out of bounds.
   inline const unsigned char * keypointDescriptor(size_t keypointIdx);
 
-  inline const cv::Mat keypointDescriptor1(size_t keypointIdx);
+  inline const cv::Mat keypointDescriptorSuperpoint(size_t keypointIdx);
 
   /// \brief Set the landmark ID
   /// @param[in] keypointIdx The requested keypoint's index.
@@ -195,7 +197,7 @@ class Frame
   /// \return The number of keypoints.
   inline size_t numKeypoints() const;
 
-  
+
   cv::Mat descriptors_;  ///< we store the descriptors using OpenCV's matrices
 
  protected:
@@ -205,7 +207,7 @@ class Frame
   std::shared_ptr<cv::DescriptorExtractor> extractor_;  ///< the extractor
   std::vector<cv::KeyPoint> keypoints_;  ///< we store keypoints using OpenCV's struct
   std::vector<uint64_t> landmarkIds_;  ///< landmark Id, if associated -- 0 otherwise
-  torch::Tensor tensor_;
+  torch::Tensor tensor_; ///< pointer to descriptor tensor
 };
 
 }  // namespace okvis

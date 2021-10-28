@@ -4,7 +4,7 @@
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions are met:
- * 
+ *
  *   * Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *   * Redistributions in binary form must reproduce the above copyright notice,
@@ -223,11 +223,11 @@ const unsigned char * MultiFrame::keypointDescriptor(size_t cameraIdx,
   return frames_[cameraIdx].keypointDescriptor(keypointIdx);
 }
 
-const cv::Mat MultiFrame::keypointDescriptor1(size_t cameraIdx,
+const cv::Mat MultiFrame::keypointDescriptorSuperpoint(size_t cameraIdx,
                                                      size_t keypointIdx)
 {
   OKVIS_ASSERT_TRUE_DBG(Exception, cameraIdx < frames_.size(), "Out of range");
-  return frames_[cameraIdx].keypointDescriptor1(keypointIdx);
+  return frames_[cameraIdx].keypointDescriptorSuperpoint(keypointIdx);
 }
 
 // Set the landmark ID
