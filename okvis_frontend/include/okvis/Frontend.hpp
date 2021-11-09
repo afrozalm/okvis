@@ -418,8 +418,8 @@ class Frontend : public VioFrontendInterface {
   /// (re)instantiates feature detectors and descriptor extractors. Used after settings changed or at startup.
   void initialiseBriskFeatureDetectors();
   void initialiseSuperPoint();
-
-  std::unique_ptr<torch::jit::script::Module> superpoint_;
+  void initialiseR2D2_N16();
+  std::unique_ptr<torch::jit::script::Module> superpoint_, R2D2_N16_;
 
 };
 

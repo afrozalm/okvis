@@ -85,8 +85,8 @@ Frontend::Frontend(size_t numCameras)
     featureDetectorMutexes_.push_back(
         std::unique_ptr<std::mutex>(new std::mutex()));
   }
-  initialiseBriskFeatureDetectors();
-  initialiseSuperPoint();
+  //initialiseBriskFeatureDetectors();
+  //initialiseSuperPoint();
   initialiseR2D2_N16();
 }
 
@@ -95,11 +95,17 @@ void Frontend::initialiseSuperPoint() {
     // TODO - parameterize model location
     // TODO - probably move detection/descripton to OpenARK
     // TODO - configure switching between different detectors
-    superpoint_ = std::make_unique<torch::jit::script::Module>(torch::jit::load("traced_superpoint_model_cuda.pt"));
+	  std::string model_path;
+	  if (const char* env_p = std::getenv("SUPERPOINT_TRACED_MODEL_PATH"))
+		  model_path = env_p;
+	  else
+		  model_path = "C:/Users/OpenARK/Desktop/openark_dependencies/okvis-master/traced_superpoint_model_cuda.pt";
+	  std::cout << "superpoint model_path: " << model_path << "\n";
+	  superpoint_ = std::make_unique<torch::jit::script::Module>(torch::jit::load(model_path));
     superpoint_->to(torch::kCUDA);
   }
   catch (const c10::Error& e) {
-    std::cerr << "error loading the model\n";
+    std::cerr << "error loading the superpoint: "<< e.msg() << "\n";
     return;
   }
 }
@@ -109,37 +115,80 @@ void Frontend::initialiseR2D2_N16() {
     // TODO - parameterize model location
     // TODO - probably move detection/descripton to OpenARK
     // TODO - configure switching between different detectors
-    R2D2_N16_ = std::make_unique<torch::jit::script::Module>(torch::jit::load("traced_r2d2_WASF_N16.pt"));
+      std::string model_path;
+      if (const char* env_p = std::getenv("R2D2_TRACED_MODEL_PATH"))
+          model_path = env_p;
+      else
+          model_path = "C:/Users/OpenARK/Desktop/r2d2_test/traced_r2d2_WASF_N16.pt";
+	std::cout << "r2d2 model_path: " << model_path << "\n";
+    R2D2_N16_ = std::make_unique<torch::jit::script::Module>(torch::jit::load(model_path));
     R2D2_N16_->to(torch::kCUDA);
   }
   catch (const c10::Error& e) {
-    std::cerr << "error loading the model\n";
+    std::cerr << "error loading the r2d2\n";
     return;
   }
 }
 
 // Detection and descriptor extraction on a per image basis.
 bool Frontend::detectAndDescribe(size_t cameraIndex,
-                                 std::shared_ptr<okvis::MultiFrame> frameOut,
-                                 const okvis::kinematics::Transformation& T_WC,
-                                 const std::vector<cv::KeyPoint> * keypoints) {
-  OKVIS_ASSERT_TRUE_DBG(Exception, cameraIndex < numCameras_, "Camera index exceeds number of cameras.");
-  std::lock_guard<std::mutex> lock(*featureDetectorMutexes_[cameraIndex]);
-  // check there are no keypoints here
-  OKVIS_ASSERT_TRUE(Exception, keypoints == nullptr, "external keypoints currently not supported")
+	std::shared_ptr<okvis::MultiFrame> frameOut,
+	const okvis::kinematics::Transformation& T_WC,
+	const std::vector<cv::KeyPoint> * keypoints) {
+	OKVIS_ASSERT_TRUE_DBG(Exception, cameraIndex < numCameras_, "Camera index exceeds number of cameras.");
+	std::lock_guard<std::mutex> lock(*featureDetectorMutexes_[cameraIndex]);
+	// check there are no keypoints here
+	OKVIS_ASSERT_TRUE(Exception, keypoints == nullptr, "external keypoints currently not supported")
+		std::cout << "detect and describe\n";
+	// convert image to tensor
+	torch::NoGradGuard no_grad;
+	const cv::Mat& gray = frameOut->image(cameraIndex);
+	cv::Mat img;
+	std::vector<torch::jit::IValue> inputs;
+	cv::cvtColor(gray, img, cv::COLOR_GRAY2RGB);
+	int H = img.rows, W = img.cols;
 
-  // convert image to tensor
-  torch::NoGradGuard no_grad;
-  const cv::Mat& img = frameOut->image(cameraIndex);
-  std::vector<torch::jit::IValue> inputs;
-  torch::Tensor img_tensor = torch::from_blob(img.data, { 1, img.rows, img.cols, 1 }, torch::kByte).to(torch::kCUDA);
-  img_tensor = img_tensor.permute({ 0, 3, 1, 2 });
-  img_tensor = img_tensor.toType(torch::kFloat);
-  img_tensor = img_tensor.div(255);
-  inputs.push_back(img_tensor);
+	// img is grayscale
+	torch::Tensor img_tensor = torch::from_blob(img.data, { 1, H, W, 3 }, torch::kByte).to(torch::kCUDA);
+	// batch, channel, ht, width
+	img_tensor = img_tensor.permute({ 0, 3, 1, 2 });
+	img_tensor = img_tensor.toType(torch::kFloat);
+	img_tensor = img_tensor.div(255);
+	inputs.push_back(img_tensor);
+	std::cout << "img done\n";
+	auto output = R2D2_N16_->forward(inputs);
+	std::cout << "fwd pass done\n";
+
+	//::cout << typeid(output).name() << "\n";
+	torch::Tensor descriptor_tensor = torch::squeeze(((torch::Tensor) output.toTensorList()[0]).to(torch::kCUDA)); // descriptors 128, W, H
+	torch::Tensor reliability_tensor = torch::squeeze(((torch::Tensor) output.toTensorList()[1]).to(torch::kCUDA)); // reliability W, H
+	torch::Tensor repeatability_tensor = torch::squeeze(((torch::Tensor) output.toTensorList()[2]).to(torch::kCUDA)); // repeatibility W, H
+	//std::cout << "unsq: " << t0.sizes() << ", " << t1.sizes() << "\n";
+	torch::Tensor score = torch::multiply(reliability_tensor, repeatability_tensor);
+	torch::Tensor mask = score > 0.99;
+	//std::cout << "score sizes" << score.sizes() << " mask : " << mask.sizes() << "\n";
+	torch::Tensor idxs = torch::arange(W*H).to(torch::kCUDA);
+	idxs = idxs.view({ H, W });
+	torch::Tensor kpts_ = torch::masked_select(idxs, mask); // [k]
+	//descriptor_tensor.permute({ 1, 2, 0 });
+	torch::Tensor descriptor_ = torch::masked_select(descriptor_tensor, mask); //[128*k]
+	std::cout << "kpts_ size: " << kpts_.sizes() << "\n";
+	std::cout << "descriptor_ size: " << descriptor_.sizes() << "\n";
+	std::vector<cv::KeyPoint> kpts;
+	descriptor_=descriptor_.view({ 128, kpts_.sizes()[0] });
+	std::cout << "descriptor_ size after view: " << descriptor_.sizes() << "\n";
+
+  for (int i = 0; i < kpts_.sizes()[0]; i++) {
+	  cv::KeyPoint kpt;
+	  kpt.pt.y = kpts_[i].item<int>() / W;
+	  kpt.pt.x = kpts_[i].item<int>() % W;
+	  kpt.size = 36; // TODO - what should this be? affects geometry check
+	  kpts.push_back(kpt);
+  }
 
   //TODO: Change this model to R2D2
   //---------------------START------------------------
+  /* Superpoint code
   auto output = superpoint_->forward(inputs);
   torch::Tensor keypoint_tensor = output.toTuple()->elements()[0].toTensor().to(torch::kCPU); // keypoints k x 2
   //torch::Tensor t1 = output.toTuple()->elements()[1].toTensor(); // scores k
@@ -154,9 +203,10 @@ bool Frontend::detectAndDescribe(size_t cameraIndex,
     kpt.size = 36; // TODO - what should this be? affects geometry check
     kpts.push_back(kpt);
   }
-  cv::Mat descriptor_mat(descriptor_tensor.sizes()[0], descriptor_tensor.sizes()[1], CV_32F, descriptor_tensor.data_ptr());
-
-  frameOut->frames_[cameraIndex].setTensor(descriptor_tensor); // prevent freeing memory
+  */
+  cv::Mat descriptor_mat(descriptor_.sizes()[0], descriptor_.sizes()[1], CV_32F, descriptor_.data_ptr());
+  std::cout << descriptor_mat.size() << "\n";
+  frameOut->frames_[cameraIndex].setTensor(descriptor_); // prevent freeing memory
   frameOut->resetKeypoints(cameraIndex, kpts);
   frameOut->resetDescriptors(cameraIndex, descriptor_mat);
   //---------------------END------------------------
