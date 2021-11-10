@@ -119,7 +119,7 @@ void Frontend::initialiseR2D2_N16() {
       if (const char* env_p = std::getenv("R2D2_TRACED_MODEL_PATH"))
           model_path = env_p;
       else
-          model_path = "C:/Users/OpenARK/Desktop/r2d2_test/traced_r2d2_WASF_N16.pt";
+          model_path = "D:/TracedModels/traced_r2d2_WASF_N16.pt";
 	std::cout << "r2d2 model_path: " << model_path << "\n";
     R2D2_N16_ = std::make_unique<torch::jit::script::Module>(torch::jit::load(model_path));
     R2D2_N16_->to(torch::kCUDA);
@@ -139,7 +139,7 @@ bool Frontend::detectAndDescribe(size_t cameraIndex,
 	std::lock_guard<std::mutex> lock(*featureDetectorMutexes_[cameraIndex]);
 	// check there are no keypoints here
 	OKVIS_ASSERT_TRUE(Exception, keypoints == nullptr, "external keypoints currently not supported")
-		std::cout << "detect and describe\n";
+
 	// convert image to tensor
 	torch::NoGradGuard no_grad;
 	const cv::Mat& gray = frameOut->image(cameraIndex);
@@ -155,29 +155,16 @@ bool Frontend::detectAndDescribe(size_t cameraIndex,
 	img_tensor = img_tensor.toType(torch::kFloat);
 	img_tensor = img_tensor.div(255);
 	inputs.push_back(img_tensor);
-	std::cout << "img done\n";
 	auto output = R2D2_N16_->forward(inputs);
-	std::cout << "fwd pass done\n";
-
+	int K = 300;
 	//::cout << typeid(output).name() << "\n";
-	torch::Tensor descriptor_tensor = torch::squeeze(((torch::Tensor) output.toTensorList()[0]).to(torch::kCUDA)); // descriptors 128, W, H
-	torch::Tensor reliability_tensor = torch::squeeze(((torch::Tensor) output.toTensorList()[1]).to(torch::kCUDA)); // reliability W, H
-	torch::Tensor repeatability_tensor = torch::squeeze(((torch::Tensor) output.toTensorList()[2]).to(torch::kCUDA)); // repeatibility W, H
-	//std::cout << "unsq: " << t0.sizes() << ", " << t1.sizes() << "\n";
-	torch::Tensor score = torch::multiply(reliability_tensor, repeatability_tensor);
-	torch::Tensor mask = score > 0.99;
-	//std::cout << "score sizes" << score.sizes() << " mask : " << mask.sizes() << "\n";
-	torch::Tensor idxs = torch::arange(W*H).to(torch::kCUDA);
-	idxs = idxs.view({ H, W });
-	torch::Tensor kpts_ = torch::masked_select(idxs, mask); // [k]
-	//descriptor_tensor.permute({ 1, 2, 0 });
-	torch::Tensor descriptor_ = torch::masked_select(descriptor_tensor, mask); //[128*k]
-	std::cout << "kpts_ size: " << kpts_.sizes() << "\n";
+	torch::Tensor desc = torch::squeeze(((torch::Tensor) output.toTensorList()[0])); // descriptors 128, W, H
+	torch::Tensor score = torch::squeeze(((torch::Tensor) output.toTensorList()[1])); // score W, H
+	torch::Tensor kpts_ = std::get<1>(score.flatten().topk(K));
+	torch::Tensor descriptor_ = torch::index_select(desc.flatten(1, 2), 1, kpts_).to(torch::kCPU);
 	std::cout << "descriptor_ size: " << descriptor_.sizes() << "\n";
-	std::vector<cv::KeyPoint> kpts;
-	descriptor_=descriptor_.view({ 128, kpts_.sizes()[0] });
-	std::cout << "descriptor_ size after view: " << descriptor_.sizes() << "\n";
 
+	std::vector<cv::KeyPoint> kpts;
   for (int i = 0; i < kpts_.sizes()[0]; i++) {
 	  cv::KeyPoint kpt;
 	  kpt.pt.y = kpts_[i].item<int>() / W;
@@ -205,7 +192,8 @@ bool Frontend::detectAndDescribe(size_t cameraIndex,
   }
   */
   cv::Mat descriptor_mat(descriptor_.sizes()[0], descriptor_.sizes()[1], CV_32F, descriptor_.data_ptr());
-  std::cout << descriptor_mat.size() << "\n";
+  std::cout << descriptor_mat.col(0).size() << " this is desc[0] size\n";
+  std::cout << cv::norm(descriptor_mat.col(0)) << " this is desc[0] norm\n";
   frameOut->frames_[cameraIndex].setTensor(descriptor_); // prevent freeing memory
   frameOut->resetKeypoints(cameraIndex, kpts);
   frameOut->resetDescriptors(cameraIndex, descriptor_mat);
